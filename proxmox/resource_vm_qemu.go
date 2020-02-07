@@ -582,6 +582,34 @@ func resourceVmQemuCreate(d *schema.ResourceData, meta interface{}) error {
 				pmParallelEnd(pconf)
 				return err
 			}
+
+			sourceVmrConfig, err := pxapi.NewConfigQemuFromApi(sourceVmr, client)
+			if err != nil {
+				pmParallelEnd(pconf)
+				return err
+			}
+			// create disks untemplated
+			if len(sourceVmrConfig.QemuDisks) < len(config.QemuDisks) {
+				for id, disk := range config.QemuDisks {
+					if _, exists := sourceVmrConfig.QemuDisks[id]; !exists {
+						err := client.CreateVMDisk(targetNode,
+							disk["storage"].(string),
+							fmt.Sprintf("%v:%v/vm-%v-disk-%v.%v", config.QemuDisks[id]["storage"], nextid, nextid, id, disk["format"]),
+							map[string]interface{}{
+								"vmid": nextid,
+								"format": disk["format"],
+								"size": disk["size"],
+								"filename": fmt.Sprintf("vm-%v-disk-%v.%v", nextid, id, disk["format"]),
+							},
+						)
+						if err != nil {
+							pmParallelEnd(pconf)
+							return err
+						}
+					}
+				}
+			}
+
 			log.Print("[DEBUG] cloning VM")
 			err = config.CloneVm(sourceVmr, vmr, client)
 			if err != nil {
