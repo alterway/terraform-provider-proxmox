@@ -763,6 +763,33 @@ func resourceVmQemuUpdate(d *schema.ResourceData, meta interface{}) error {
 		config.QemuVga = qemuVgaList[0].(map[string]interface{})
 	}
 
+	vmrConfig, err := pxapi.NewConfigQemuFromApi(vmr, client)
+	if err != nil {
+		pmParallelEnd(pconf)
+		return err
+	}
+	// create missing disks
+	if len(vmrConfig.QemuDisks) < len(config.QemuDisks) {
+		for id, disk := range config.QemuDisks {
+			if _, exists := vmrConfig.QemuDisks[id]; !exists {
+				err := client.CreateVMDisk(vmr.Node(),
+					disk["storage"].(string),
+					fmt.Sprintf("%v:%v/vm-%v-disk-%v.%v", config.QemuDisks[id]["storage"], vmID, vmID, id, disk["format"]),
+					map[string]interface{}{
+						"vmid": vmID,
+						"format": disk["format"],
+						"size": disk["size"],
+						"filename": fmt.Sprintf("vm-%v-disk-%v.%v", vmID, id, disk["format"]),
+					},
+				)
+				if err != nil {
+					pmParallelEnd(pconf)
+					return err
+				}
+			}
+		}
+	}
+
 	err = config.UpdateConfig(vmr, client)
 	if err != nil {
 		pmParallelEnd(pconf)
